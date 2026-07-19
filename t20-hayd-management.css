@@ -1,0 +1,357 @@
+/* ============================================================
+   T20 Hayd — Gestão de Party
+============================================================ */
+
+.thm-party-sheet .window-content {
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.thm-party-sheet .thm-sheet-root {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.thm-party-sheet section.tab {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 8px;
+}
+
+.thm-party-sheet section.tab:not(.active) {
+  display: none;
+}
+
+.thm-party-sheet nav.tabs {
+  flex: 0 0 auto;
+  border-bottom: 1px solid var(--color-border-light-primary, #7a7971);
+  display: flex;
+  gap: 4px;
+  padding: 4px 8px 0;
+}
+
+.thm-party-sheet nav.tabs a {
+  padding: 5px 14px;
+  font-weight: bold;
+  border-radius: 4px 4px 0 0;
+}
+
+.thm-party-sheet nav.tabs a.active {
+  background: rgba(120, 46, 34, 0.25);
+  text-shadow: 0 0 8px var(--color-shadow-primary, #ff6400);
+}
+
+/* ---------- Aba Membros ---------- */
+
+.thm-members {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.thm-member-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 10px;
+  border: 1px solid var(--color-border-light-tertiary, #b5b3a4);
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.05);
+}
+
+.thm-member-card img.thm-portrait {
+  width: 48px;
+  height: 48px;
+  object-fit: cover;
+  border: 1px solid #782e22;
+  border-radius: 4px;
+  cursor: pointer;
+  flex: 0 0 48px;
+}
+
+.thm-member-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.thm-member-name {
+  font-weight: bold;
+  font-size: 1.05em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.thm-member-name .thm-member-level {
+  font-weight: normal;
+  font-size: 0.85em;
+  opacity: 0.75;
+  margin-left: 6px;
+}
+
+.thm-bars {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.thm-bar {
+  position: relative;
+  height: 14px;
+  border: 1px solid rgba(0, 0, 0, 0.5);
+  border-radius: 3px;
+  background: rgba(0, 0, 0, 0.35);
+  overflow: hidden;
+}
+
+.thm-bar .thm-bar-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  border-radius: 2px;
+  transition: width 0.3s ease;
+}
+
+.thm-bar.thm-pv .thm-bar-fill {
+  background: linear-gradient(to right, #8b0000, #c0392b);
+}
+
+.thm-bar.thm-pm .thm-bar-fill {
+  background: linear-gradient(to right, #1a4a8b, #2980b9);
+}
+
+.thm-bar.thm-carga .thm-bar-fill {
+  background: linear-gradient(to right, #5d4a1f, #8a6d2f);
+}
+
+.thm-bar.thm-carga.thm-encumbered .thm-bar-fill {
+  background: linear-gradient(to right, #8a2f1f, #c0392b);
+}
+
+.thm-bar .thm-bar-label {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  font-weight: bold;
+  color: #fff;
+  text-shadow: 0 0 3px #000, 0 0 3px #000;
+  pointer-events: none;
+}
+
+.thm-member-actions {
+  flex: 0 0 auto;
+  display: flex;
+  gap: 4px;
+}
+
+.thm-member-actions button {
+  width: 28px;
+  height: 28px;
+  line-height: 26px;
+  padding: 0;
+  font-size: 12px;
+}
+
+.thm-empty {
+  text-align: center;
+  font-style: italic;
+  opacity: 0.7;
+  padding: 20px 0;
+}
+
+/* ---------- Aba Inventário ---------- */
+
+.thm-money-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 8px;
+  margin-bottom: 8px;
+  border: 1px solid var(--color-border-light-tertiary, #b5b3a4);
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.05);
+}
+
+.thm-money-row .thm-coin {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-weight: bold;
+}
+
+.thm-money-row .thm-coin i {
+  font-size: 12px;
+}
+
+.thm-coin-to i { color: #d4af37; }
+.thm-coin-tp i { color: #a8a9ad; }
+.thm-coin-tc i { color: #b87333; }
+
+.thm-money-actions {
+  margin-left: auto;
+  display: flex;
+  gap: 4px;
+}
+
+.thm-money-actions button,
+.thm-inv-header button {
+  width: auto;
+  padding: 2px 8px;
+  font-size: 12px;
+  line-height: 20px;
+}
+
+.thm-inv-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.thm-inv-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 6px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+.thm-inv-item:hover {
+  background: rgba(120, 46, 34, 0.1);
+}
+
+.thm-inv-item img {
+  width: 26px;
+  height: 26px;
+  border: none;
+  border-radius: 3px;
+  flex: 0 0 26px;
+}
+
+.thm-inv-item .thm-item-name {
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.thm-inv-item .thm-item-qty {
+  flex: 0 0 50px;
+  text-align: center;
+  opacity: 0.85;
+}
+
+.thm-inv-item .thm-item-type {
+  flex: 0 0 90px;
+  text-align: right;
+  font-size: 0.85em;
+  opacity: 0.6;
+}
+
+/* ---------- Botão de enviar dinheiro na ficha ---------- */
+
+/* O <li> injetado não pode esticar (flexrow dá flex:1 aos filhos) nem
+   herdar o visual de "pílula" dos campos de moeda do sistema. */
+ul.currency li.currency-item.thm-send {
+  flex: 0 0 auto;
+  background: transparent;
+  border: none;
+  padding: 0;
+  line-height: normal;
+  align-self: center;
+}
+
+/* Quadradinho compacto com o ícone centralizado, como o botão de
+   criar item do inventário do personagem. */
+.thm-send-money-btn {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  font-size: 12px;
+  cursor: pointer;
+  border: 1px solid rgba(128, 128, 128, 0.55);
+  border-radius: 4px;
+  background: rgba(128, 128, 128, 0.15);
+}
+
+.thm-send-money-btn:hover {
+  border-color: currentColor;
+  text-shadow: 0 0 6px currentColor;
+}
+
+/* ---------- Botão de party no cabeçalho da pasta ---------- */
+
+.directory .folder-header button.thm-party-btn {
+  flex: 0 0 auto;
+}
+
+/* ---------- Diálogos ---------- */
+
+.thm-dialog .form-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 6px 0;
+}
+
+.thm-dialog .form-group label {
+  flex: 1;
+}
+
+.thm-dialog .form-group input[type="number"],
+.thm-dialog .form-group select {
+  flex: 2;
+}
+
+.thm-dialog .thm-hint {
+  font-size: 0.85em;
+  opacity: 0.75;
+  margin: 4px 0;
+}
+
+/* ---------- Mensagem de chat ---------- */
+
+.thm-chat-card {
+  border: 1px solid #782e22;
+  border-radius: 6px;
+  padding: 6px 8px;
+  background: rgba(120, 46, 34, 0.06);
+}
+
+.thm-chat-card .thm-chat-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: bold;
+  border-bottom: 1px solid rgba(120, 46, 34, 0.4);
+  padding-bottom: 4px;
+  margin-bottom: 4px;
+}
+
+.thm-chat-card .thm-chat-header i {
+  color: #782e22;
+}
+
+.thm-chat-card .thm-chat-body {
+  font-size: 0.95em;
+}
+
+.thm-chat-card .thm-chat-body ul {
+  margin: 4px 0 0;
+  padding-left: 18px;
+}

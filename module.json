@@ -1,0 +1,78 @@
+{
+  "id": "t20-hayd-management",
+  "title": "T20 Hayd Gestão de Party",
+  "description": "<p>Party Sheet para Tormenta20: membros da party com estimativas de PV/PM, inventário e dinheiro compartilhados, e transferência de itens e dinheiro entre personagens da mesma party.</p>",
+  "version": "1.0.0",
+  "compatibility": {
+    "minimum": "13",
+    "verified": "13",
+    "maximum": "13"
+  },
+  "relationships": {
+    "systems": [
+      {
+        "id": "tormenta20",
+        "type": "system",
+        "compatibility": {
+          "minimum": "1.5.0"
+        }
+      }
+    ],
+    "requires": [
+      {
+        "id": "socketlib",
+        "type": "module",
+        "compatibility": {}
+      }
+    ]
+  },
+  "socket": true,
+  "esmodules": [
+    "t20-hayd-management.mjs"
+  ],
+  "styles": [
+    {
+      "src": "t20-hayd-management.css"
+    }
+  ],
+  "languages": [
+    {
+      "lang": "pt-BR",
+      "name": "Português (Brasil)",
+      "path": "lang/pt-BR.json",
+      "flags": {}
+    },
+    {
+      "lang": "en",
+      "name": "English",
+      "path": "lang/pt-BR.json",
+      "flags": {}
+    }
+  ],
+  "authors": [
+    {
+      "name": "Hayd",
+      "flags": {}
+    }
+  ],
+  "flags": {
+    "hotReload": {
+      "extensions": [
+        "css",
+        "hbs",
+        "json"
+      ],
+      "paths": [
+        "t20-hayd-management.css",
+        "templates",
+        "lang"
+      ]
+    }
+  },
+  "url": "https://github.com/Haydgi/t20-hayd-management",
+  "manifest": "https://raw.githubusercontent.com/Haydgi/t20-hayd-management/main/module.json",
+  "download": "https://github.com/Haydgi/t20-hayd-management/archive/refs/heads/main.zip",
+  "readme": "https://github.com/Haydgi/t20-hayd-management/blob/main/README.md",
+  "bugs": "https://github.com/Haydgi/t20-hayd-management/issues",
+  "license": "MIT"
+}

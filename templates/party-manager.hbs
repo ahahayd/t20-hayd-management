@@ -1,0 +1,19 @@
+<div class="thm-manager-root">
+<p class="thm-hint">{{localize "THM.PartyManagerHint"}}</p>
+
+<div class="thm-folder-list">
+  {{#each folders}}
+  <label class="thm-folder-row" style="display:block; padding: 3px 0 3px {{this.indent}}px;">
+    <input type="checkbox" name="party.{{this.id}}" {{checked this.isParty}} />
+    <i class="fa-solid fa-folder" style="color: {{this.color}};"></i>
+    {{this.name}}
+  </label>
+  {{else}}
+  <p class="thm-empty">{{localize "THM.PartyManagerNoFolders"}}</p>
+  {{/each}}
+</div>
+
+<footer class="form-footer" style="margin-top: 8px;">
+  <button type="submit"><i class="fa-solid fa-save"></i> {{localize "THM.Save"}}</button>
+</footer>
+</div>

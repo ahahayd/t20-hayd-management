@@ -355,3 +355,29 @@ ul.currency li.currency-item.thm-send {
   margin: 4px 0 0;
   padding-left: 18px;
 }
+
+/* Lista da mensagem de boas-vindas */
+.thm-chat-card .thm-welcome-list {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 0;
+}
+
+.thm-chat-card .thm-welcome-item {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  padding: 4px 0;
+  border-top: 1px solid rgba(120, 46, 34, 0.15);
+}
+
+.thm-chat-card .thm-welcome-item:first-child {
+  border-top: none;
+}
+
+.thm-chat-card .thm-welcome-item > i {
+  flex: 0 0 16px;
+  margin-top: 3px;
+  text-align: center;
+  color: #782e22;
+}

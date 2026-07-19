@@ -93,6 +93,14 @@ function registerSettings() {
     default: true
   });
 
+  // Controle interno: mensagem de boas-vindas já foi enviada?
+  game.settings.register(MODULE_ID, "welcomeShown", {
+    scope: "world",
+    config: false,
+    type: Boolean,
+    default: false
+  });
+
   game.settings.registerMenu(MODULE_ID, "partyManager", {
     name: "THM.PartyManagerMenuName",
     label: "THM.PartyManagerMenuLabel",
@@ -1319,7 +1327,8 @@ class PartyManagerApp extends HandlebarsApplicationMixin(ApplicationV2) {
     classes: ["thm-party-manager", "standard-form"],
     window: { title: "THM.PartyManagerTitle", icon: "fa-solid fa-users-gear" },
     position: { width: 420 },
-    form: { handler: PartyManagerApp.#onSubmit, closeOnSubmit: true }
+    form: { handler: PartyManagerApp.#onSubmit, closeOnSubmit: true },
+    actions: { createFolder: PartyManagerApp.#onCreateFolder }
   };
 
   static PARTS = {
@@ -1369,6 +1378,38 @@ class PartyManagerApp extends HandlebarsApplicationMixin(ApplicationV2) {
     ui.notifications.info(loc("THM.PartiesSaved"));
     refreshPartyApps();
     ui.actors?.render(); // atualiza os botões de party nas pastas
+  }
+
+  /** Cria uma nova pasta de atores e já a marca como party. */
+  static async #onCreateFolder() {
+    const name = await foundry.applications.api.DialogV2.prompt({
+      window: { title: loc("THM.CreateFolderTitle"), icon: "fa-solid fa-folder-plus" },
+      content: `
+        <div class="thm-dialog">
+          <div class="form-group">
+            <label>${loc("THM.CreateFolderLabel")}</label>
+            <input type="text" name="name" value="${esc(loc("THM.NewPartyName"))}" autofocus />
+          </div>
+        </div>`,
+      ok: {
+        label: loc("THM.Create"),
+        icon: "fa-solid fa-folder-plus",
+        callback: (event, button) => button.form.elements.name.value.trim()
+      },
+      rejectClose: false
+    });
+    if (!name) return;
+
+    const folder = await Folder.create({ name, type: "Actor" });
+    if (!folder) return;
+
+    const parties = getPartiesSetting();
+    parties[folder.id] = parties[folder.id] ?? {};
+    await game.settings.set(MODULE_ID, "parties", parties);
+
+    ui.actors?.render();
+    refreshPartyApps();
+    this.render(); // reflete a nova pasta marcada na lista
   }
 }
 
@@ -1523,6 +1564,62 @@ function registerUiHooks() {
 }
 
 /* ============================================================
+   PRIMEIRO USO — mensagem de boas-vindas e abertura do gerenciador
+============================================================ */
+
+/** Monta e publica no chat a mensagem explicando o módulo (visível a todos). */
+async function postWelcomeMessage() {
+  const feature = (icon, title, desc) => `
+    <li class="thm-welcome-item">
+      <i class="fa-solid ${icon}"></i>
+      <div><strong>${loc(title)}</strong> — ${loc(desc)}</div>
+    </li>`;
+
+  const content = `
+    <div class="thm-chat-card thm-welcome">
+      <div class="thm-chat-header">
+        <i class="fa-solid fa-users"></i> ${loc("THM.WelcomeTitle")}
+      </div>
+      <div class="thm-chat-body">
+        <p>${loc("THM.WelcomeIntro")}</p>
+        <ul class="thm-welcome-list">
+          ${feature("fa-users", "THM.WelcomePartyBtnTitle", "THM.WelcomePartyBtnDesc")}
+          ${feature("fa-heart-pulse", "THM.WelcomeMembersTitle", "THM.WelcomeMembersDesc")}
+          ${feature("fa-box-open", "THM.WelcomeInventoryTitle", "THM.WelcomeInventoryDesc")}
+          ${feature("fa-paper-plane", "THM.WelcomeSendItemTitle", "THM.WelcomeSendItemDesc")}
+          ${feature("fa-coins", "THM.WelcomeSendMoneyTitle", "THM.WelcomeSendMoneyDesc")}
+          ${feature("fa-hand", "THM.WelcomeDragTitle", "THM.WelcomeDragDesc")}
+          ${feature("fa-gear", "THM.WelcomeSettingsTitle", "THM.WelcomeSettingsDesc")}
+        </ul>
+        <p class="thm-hint">${loc("THM.WelcomeGmTip")}</p>
+      </div>
+    </div>`;
+
+  await ChatMessage.create({
+    content,
+    speaker: { alias: loc("THM.ModuleTitle") },
+    flags: { [MODULE_ID]: { welcome: true } }
+  });
+}
+
+/**
+ * Executado no ready pelo GM principal:
+ *  - envia a mensagem de boas-vindas uma única vez;
+ *  - se nenhuma pasta de party estiver configurada, abre o gerenciador
+ *    (tanto no primeiro uso quanto nos seguintes).
+ */
+async function runFirstUseFlow() {
+  if (!game.settings.get(MODULE_ID, "welcomeShown")) {
+    await postWelcomeMessage();
+    await game.settings.set(MODULE_ID, "welcomeShown", true);
+  }
+
+  if (getPartyFolderIds().length === 0) {
+    new PartyManagerApp().render(true);
+  }
+}
+
+/* ============================================================
    INICIALIZAÇÃO
 ============================================================ */
 
@@ -1551,6 +1648,11 @@ Hooks.once("ready", () => {
   // Migra estoques criados como ator pela versão anterior (só um GM executa)
   if (game.user.isGM && game.user === game.users.activeGM) {
     gmMigrateLegacyStashes();
+  }
+
+  // Boas-vindas + abertura do gerenciador quando não há party (só o GM principal)
+  if (game.user.isGM && game.user === game.users.activeGM) {
+    runFirstUseFlow();
   }
 
   console.log(`${MODULE_ID} | pronto`);

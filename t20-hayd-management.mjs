@@ -182,6 +182,20 @@ function getStashData(folderId) {
   };
 }
 
+/**
+ * Versão SOMENTE LEITURA do estoque: devolve os itens crus da flag SEM
+ * deepClone (que copiava descrições/efeitos inteiros a cada render).
+ * NUNCA mutar o retorno — para escrever, use getStashData/setStashData.
+ */
+function getStashDataRaw(folderId) {
+  const folder = game.folders.get(folderId);
+  const raw = folder?.getFlag(MODULE_ID, "stash") ?? {};
+  return {
+    money: Object.fromEntries(COINS.map((k) => [k, Number(raw.money?.[k]) || 0])),
+    items: Array.isArray(raw.items) ? raw.items : []
+  };
+}
+
 /** (GM) Persiste os dados do estoque na pasta da party. */
 async function setStashData(folderId, data) {
   const folder = game.folders.get(folderId);
@@ -327,7 +341,7 @@ function coinsTotal(coins) {
  * regra ativada — ou se já houver TL guardado no estoque.
  */
 function partyUsesPlatina(folderId) {
-  if (getStashData(folderId).money.tl > 0) return true;
+  if (getStashDataRaw(folderId).money.tl > 0) return true;
   return getMembers(folderId).some(
     (a) => !!a.getFlag("tormenta20", "sheet.mostrarPlatina")
   );
@@ -561,7 +575,7 @@ async function gmExecuteTransfer(payload) {
   // Disponibilidade na origem (reutilizado na revalidação pós-confirmação)
   const findSourceItem = () => {
     if (source.isStash) {
-      const entry = getStashData(source.folderId).items.find(
+      const entry = getStashDataRaw(source.folderId).items.find(
         (e) => e._id === payload.itemId
       );
       return entry
@@ -573,7 +587,7 @@ async function gmExecuteTransfer(payload) {
     return { name: it.name, have: Number(it.system.qtd ?? 1) || 0 };
   };
   const sourceBalance = () =>
-    source.isStash ? getStashData(source.folderId).money : getMoney(source.actor);
+    source.isStash ? getStashDataRaw(source.folderId).money : getMoney(source.actor);
 
   // ---------- Validação de disponibilidade ----------
   let qty = 0;
@@ -978,7 +992,7 @@ async function openMoneyDialog({
   // Validação local de saldo (o GM revalida na execução)
   const srcActor = source.actorId ? game.actors.get(source.actorId) : null;
   const balance = source.stashFolderId
-    ? getStashData(source.stashFolderId).money
+    ? getStashDataRaw(source.stashFolderId).money
     : srcActor
       ? getMoney(srcActor)
       : null;
@@ -1017,6 +1031,580 @@ async function openSendMoneyDialog(actor) {
 
 const { ApplicationV2, HandlebarsApplicationMixin } = foundry.applications.api;
 
+/* ============================================================
+   ITENS DO ESTOQUE — ver, editar, quantidade, excluir
+============================================================ */
+
+/** Visualização somente leitura de um item do estoque (todos os usuários). */
+function previewStashItem(folderId, entryId) {
+  const entry = getStashDataRaw(folderId).items.find((e) => e._id === entryId);
+  if (!entry) return;
+  const data = foundry.utils.deepClone(entry);
+  delete data._id;
+  // Documento temporário (não persiste): serve só para renderizar a ficha
+  const temp = new Item.implementation(data);
+  temp.sheet.render(true);
+}
+
+/**
+ * (GM) Edita um item do estoque com a ficha REAL do sistema: cria um item
+ * de mundo temporário, abre a ficha e, ao fechá-la, grava as mudanças de
+ * volta na entrada do estoque e apaga o temporário.
+ */
+async function editStashItem(folderId, entryId) {
+  if (!game.user.isGM) return;
+  const entry = getStashDataRaw(folderId).items.find((e) => e._id === entryId);
+  if (!entry) return;
+
+  const data = foundry.utils.deepClone(entry);
+  delete data._id;
+  foundry.utils.setProperty(data, `flags.${MODULE_ID}.stashEdit`, { folderId, entryId });
+  const temp = await Item.implementation.create(data);
+  if (!temp) return;
+
+  const hookId = Hooks.on("closeItemSheet", async (app) => {
+    if (app.document?.id !== temp.id) return;
+    Hooks.off("closeItemSheet", hookId);
+    try {
+      const updated = temp.toObject();
+      delete updated._id;
+      delete updated.folder;
+      delete updated.sort;
+      if (updated.flags?.[MODULE_ID]) delete updated.flags[MODULE_ID].stashEdit;
+
+      const stash = getStashData(folderId);
+      const idx = stash.items.findIndex((e) => e._id === entryId);
+      if (idx >= 0) {
+        updated._id = entryId;
+        stash.items[idx] = updated;
+        await setStashData(folderId, stash);
+      }
+    } finally {
+      await temp.delete();
+    }
+  });
+  temp.sheet.render(true);
+}
+
+/** (GM) Remove itens temporários de edição órfãos (F5 com a ficha aberta). */
+async function gmCleanupStashEditItems() {
+  const orfaos = game.items.filter((i) => i.getFlag(MODULE_ID, "stashEdit"));
+  for (const item of orfaos) await item.delete().catch(() => {});
+}
+
+/** (GM) Altera diretamente a quantidade de uma entrada do estoque. */
+async function changeStashItemQty(folderId, entryId) {
+  if (!game.user.isGM) return;
+  const entry = getStashDataRaw(folderId).items.find((e) => e._id === entryId);
+  if (!entry) return;
+  const atual = Number(entry.system?.qtd ?? 1) || 1;
+
+  const result = await foundry.applications.api.DialogV2.wait({
+    window: { title: loc("THM.ChangeQtyTitle", { item: entry.name }), icon: "fa-solid fa-hashtag" },
+    content: `<div class="thm-dialog">
+      <div class="form-group">
+        <label>${loc("THM.Quantity")}</label>
+        <input type="number" name="qty" value="${atual}" min="0" step="1" autofocus />
+      </div>
+      <p class="thm-hint">${loc("THM.ChangeQtyHint")}</p>
+    </div>`,
+    rejectClose: false,
+    buttons: [
+      {
+        action: "save",
+        icon: "fa-solid fa-check",
+        label: loc("THM.Save"),
+        default: true,
+        callback: (event, button) =>
+          Math.max(0, Math.floor(Number(button.form.elements.qty.value) || 0))
+      },
+      { action: "cancel", icon: "fa-solid fa-xmark", label: loc("THM.Cancel") }
+    ]
+  });
+  if (result === null || result === "cancel") return;
+
+  const stash = getStashData(folderId);
+  const idx = stash.items.findIndex((e) => e._id === entryId);
+  if (idx < 0) return;
+  if (result === 0) stash.items.splice(idx, 1);
+  else stash.items[idx].system.qtd = result;
+  await setStashData(folderId, stash);
+}
+
+/** (GM) Exclui uma entrada do estoque (a pilha inteira), com confirmação. */
+async function deleteStashItem(folderId, entryId) {
+  if (!game.user.isGM) return;
+  const entry = getStashDataRaw(folderId).items.find((e) => e._id === entryId);
+  if (!entry) return;
+  const qtd = Number(entry.system?.qtd ?? 1) || 1;
+
+  const ok = await foundry.applications.api.DialogV2.confirm({
+    window: { title: loc("THM.DeleteItemTitle") },
+    content: `<p>${loc("THM.DeleteItemConfirm", { qty: qtd, item: esc(entry.name) })}</p>`,
+    rejectClose: false
+  });
+  if (!ok) return;
+
+  const stash = getStashData(folderId);
+  stash.items = stash.items.filter((e) => e._id !== entryId);
+  await setStashData(folderId, stash);
+}
+
+/* ============================================================
+   FERRAMENTAS DO MESTRE (aba "Mestre" da Party Sheet)
+============================================================ */
+
+/** Card de chat no estilo do sistema (mesmo template dos descansos). */
+async function postGmCard(title, img, html) {
+  const content = {
+    item: { name: title, img },
+    system: { description: { value: html } }
+  };
+  const rendered = await foundry.applications.handlebars.renderTemplate(
+    "systems/tormenta20/templates/chat/chat-card.hbs",
+    content
+  );
+  return ChatMessage.create({
+    user: game.user.id,
+    type: CONST.CHAT_MESSAGE_STYLES.OTHER,
+    content: rendered
+  });
+}
+
+function memberChecksHtml(members, prefix = "m") {
+  return members
+    .map(
+      (a) => `
+      <label class="thm-check">
+        <input type="checkbox" name="${prefix}-${a.id}" checked />
+        <img src="${esc(a.img)}" alt="" /> ${esc(a.name)}
+      </label>`
+    )
+    .join("");
+}
+
+function readCheckedMembers(form, members, prefix = "m") {
+  return members.filter((a) => form.elements[`${prefix}-${a.id}`]?.checked);
+}
+
+/** (GM) Edita manualmente o dinheiro do estoque da party. */
+async function openEditStashMoneyDialog(folderId) {
+  if (!game.user.isGM) return;
+  const money = getStashDataRaw(folderId).money;
+  const showTl = partyUsesPlatina(folderId);
+  const keys = showTl ? COINS : COINS.filter((k) => k !== "tl");
+
+  const inputs = keys
+    .map(
+      (k) => `
+      <div class="form-group">
+        <label>${loc(COIN_NAMES[k])}</label>
+        <input type="number" name="coin-${k}" value="${money[k]}" min="0" step="1" />
+      </div>`
+    )
+    .join("");
+
+  const result = await foundry.applications.api.DialogV2.wait({
+    window: { title: loc("THM.EditStashMoneyTitle"), icon: "fa-solid fa-pen" },
+    position: { width: 340 },
+    content: `<div class="thm-dialog">${inputs}
+      <p class="thm-hint">${loc("THM.EditStashMoneyHint")}</p></div>`,
+    rejectClose: false,
+    buttons: [
+      {
+        action: "save",
+        icon: "fa-solid fa-check",
+        label: loc("THM.Save"),
+        default: true,
+        callback: (event, button) => readCoinsFromForm(button.form)
+      },
+      { action: "cancel", icon: "fa-solid fa-xmark", label: loc("THM.Cancel") }
+    ]
+  });
+  if (!result || result === "cancel") return;
+
+  const stash = getStashData(folderId);
+  stash.money = { ...stash.money, ...result };
+  if (!showTl) stash.money.tl = getStashData(folderId).money.tl;
+  await setStashData(folderId, stash);
+}
+
+/** (GM) Distribui dinheiro para membros da party (recompensas). */
+async function openDistributeMoneyDialog(folderId) {
+  if (!game.user.isGM) return;
+  const members = getMembers(folderId).filter((a) => a.system?.dinheiro);
+  if (!members.length) return ui.notifications.warn(loc("THM.NoMembers"));
+  const showTl = partyUsesPlatina(folderId);
+
+  const result = await foundry.applications.api.DialogV2.wait({
+    window: { title: loc("THM.DistributeMoneyTitle"), icon: "fa-solid fa-hand-holding-dollar" },
+    position: { width: 420 },
+    content: `<div class="thm-dialog">
+      <p class="thm-hint">${loc("THM.DistributeMoneyHint")}</p>
+      ${coinInputsHtml(null, { showTl })}
+      <div class="form-group">
+        <label>${loc("THM.DistributeMode")}</label>
+        <select name="mode">
+          <option value="igual" selected>${loc("THM.DistributeModeEqual")}</option>
+          <option value="cada">${loc("THM.DistributeModeEach")}</option>
+        </select>
+      </div>
+      <fieldset class="thm-fieldset"><legend>${loc("THM.DistributeWho")}</legend>
+        <div class="thm-check-list">${memberChecksHtml(members)}</div>
+      </fieldset>
+    </div>`,
+    rejectClose: false,
+    buttons: [
+      {
+        action: "apply",
+        icon: "fa-solid fa-check",
+        label: loc("THM.Distribute"),
+        default: true,
+        callback: (event, button) => ({
+          coins: readCoinsFromForm(button.form),
+          mode: button.form.elements.mode.value,
+          ids: readCheckedMembers(button.form, members).map((a) => a.id)
+        })
+      },
+      { action: "cancel", icon: "fa-solid fa-xmark", label: loc("THM.Cancel") }
+    ]
+  });
+  if (!result || result === "cancel") return;
+
+  const alvo = members.filter((a) => result.ids.includes(a.id));
+  if (!alvo.length) return ui.notifications.warn(loc("THM.NoneSelected"));
+  if (coinsTotal(result.coins) <= 0) return ui.notifications.warn(loc("THM.NothingToGive"));
+
+  // Modo "igual": divide o total entre os marcados; a sobra vai ao estoque.
+  // Modo "cada": cada marcado recebe exatamente o valor digitado.
+  let porMembro = result.coins;
+  const sobra = Object.fromEntries(COINS.map((k) => [k, 0]));
+  if (result.mode === "igual") {
+    porMembro = {};
+    for (const k of COINS) {
+      porMembro[k] = Math.floor((result.coins[k] || 0) / alvo.length);
+      sobra[k] = (result.coins[k] || 0) - porMembro[k] * alvo.length;
+    }
+  }
+
+  for (const actor of alvo) {
+    if (lojaCompatEnabled()) markLojaSuppress(actor.id);
+    const atual = getMoney(actor);
+    const updates = {};
+    for (const k of COINS) {
+      if (porMembro[k]) updates[`system.dinheiro.${k}`] = atual[k] + porMembro[k];
+    }
+    if (!foundry.utils.isEmpty(updates)) await actor.update(updates);
+  }
+
+  let restoTxt = "";
+  if (coinsTotal(sobra) > 0) {
+    const stash = getStashData(folderId);
+    for (const k of COINS) stash.money[k] += sobra[k];
+    await setStashData(folderId, stash);
+    restoTxt = `<br><em>${loc("THM.DistributeRemainder", { coins: coinsLabel(sobra) })}</em>`;
+  }
+
+  await postGmCard(
+    loc("THM.DistributeMoneyTitle"),
+    "icons/svg/chest.svg",
+    `<p>${loc("THM.DistributeChat", {
+      coins: coinsLabel(porMembro) || "0",
+      names: alvo.map((a) => esc(a.name)).join(", ")
+    })}${restoTxt}</p>`
+  );
+}
+
+/** Rótulos de qualidade de descanso do sistema (T20: 0.5/1/2/3 por nível). */
+const REST_QUALITIES = [
+  { value: 0.5, key: "THM.RestPoor" },
+  { value: 1, key: "THM.RestNormal" },
+  { value: 2, key: "THM.RestComfortable" },
+  { value: 3, key: "THM.RestLuxurious" }
+];
+
+/** (GM) Descanso para a party, personalizável por membro. */
+async function openPartyRestDialog(folderId) {
+  if (!game.user.isGM) return;
+  const members = getMembers(folderId).filter((a) => a.type === "character");
+  if (!members.length) return ui.notifications.warn(loc("THM.NoMembers"));
+  const nivelDe = (a) => Number(a.system?.attributes?.nivel?.value) || 1;
+
+  const qualidadeOpts = (sel = 1) =>
+    REST_QUALITIES.map(
+      (q) => `<option value="${q.value}" ${q.value === sel ? "selected" : ""}>${loc(q.key)}</option>`
+    ).join("");
+
+  /* Os rótulos ficam DENTRO de cada campo (coluna própria), então o
+   * alinhamento é automático — sem cabeçalho separado para desalinhar. */
+  const campos = (id, { toolbar = false } = {}) => `
+    <label class="thm-field">
+      <span>${loc("THM.RestQuality")}</span>
+      <select name="q-${id}">${toolbar ? `<option value="" selected>—</option>` : ""}${qualidadeOpts(toolbar ? null : 1)}</select>
+    </label>
+    <label class="thm-field">
+      <span>${loc("THM.RestExtraPVShort")}</span>
+      <input type="number" name="pv-${id}" value="${toolbar ? "" : 0}" step="1" ${toolbar ? 'placeholder="—"' : ""} />
+    </label>
+    <label class="thm-field">
+      <span>${loc("THM.RestExtraPMShort")}</span>
+      <input type="number" name="pm-${id}" value="${toolbar ? "" : 0}" step="1" ${toolbar ? 'placeholder="—"' : ""} />
+    </label>`;
+
+  const cards = members
+    .map(
+      (a) => `
+      <div class="thm-rest-card" data-actor-id="${a.id}">
+        <label class="thm-rest-who">
+          <input type="checkbox" name="m-${a.id}" checked />
+          <img src="${esc(a.img)}" alt="" />
+          <span class="thm-rest-name">${esc(a.name)}
+            <small>${loc("THM.Level")} ${nivelDe(a)}</small></span>
+          <span class="thm-rest-preview" data-preview="${a.id}"></span>
+        </label>
+        <div class="thm-rest-line">${campos(a.id)}</div>
+      </div>`
+    )
+    .join("");
+
+  const result = await foundry.applications.api.DialogV2.wait({
+    window: { title: loc("THM.PartyRestTitle"), icon: "fa-solid fa-bed" },
+    position: { width: 540 },
+    content: `<div class="thm-dialog thm-rest">
+      <div class="thm-rest-toolbar">
+        <span class="thm-rest-toolbar-label"><i class="fa-solid fa-wand-magic-sparkles"></i> ${loc("THM.RestApplyAll")}</span>
+        <div class="thm-rest-line">${campos("all", { toolbar: true })}</div>
+      </div>
+      ${cards}
+      <p class="thm-hint">${loc("THM.RestPreviewHint")}</p>
+    </div>`,
+    rejectClose: false,
+    render: (event, dialog) => {
+      const el = dialog.element;
+      const $ = (name) => el.querySelector(`[name="${name}"]`);
+
+      /* Prévia ao vivo — mesma fórmula do descanso do sistema:
+       * floor(nível × (condição + extra)). */
+      const atualizar = () => {
+        for (const a of members) {
+          const nivel = nivelDe(a);
+          const q = parseFloat($(`q-${a.id}`).value) || 1;
+          const pv = Math.floor(Number($(`pv-${a.id}`).value) || 0);
+          const pm = Math.floor(Number($(`pm-${a.id}`).value) || 0);
+          const rPV = Math.floor(nivel * (q + pv));
+          const rPM = Math.floor(nivel * (q + pm));
+          const alvo = el.querySelector(`[data-preview="${a.id}"]`);
+          if (alvo) alvo.innerHTML =
+            `<b class="thm-pv-txt">+${rPV} PV</b><b class="thm-pm-txt">+${rPM} PM</b>`;
+        }
+      };
+
+      /* Barra "aplicar a todos": replica o campo alterado em cada card. */
+      $("q-all")?.addEventListener("change", (ev) => {
+        if (ev.currentTarget.value === "") return;
+        members.forEach((a) => ($(`q-${a.id}`).value = ev.currentTarget.value));
+        atualizar();
+      });
+      for (const campo of ["pv", "pm"]) {
+        $(`${campo}-all`)?.addEventListener("change", (ev) => {
+          if (ev.currentTarget.value === "") return;
+          members.forEach((a) => ($(`${campo}-${a.id}`).value = ev.currentTarget.value));
+          atualizar();
+        });
+      }
+
+      el.addEventListener("change", atualizar);
+      el.addEventListener("input", atualizar);
+      atualizar();
+    },
+    buttons: [
+      {
+        action: "rest",
+        icon: "fa-solid fa-bed",
+        label: loc("THM.Rest"),
+        default: true,
+        callback: (event, button) => {
+          const f = button.form;
+          return {
+            membros: readCheckedMembers(f, members).map((a) => ({
+              id: a.id,
+              qualidade: parseFloat(f.elements[`q-${a.id}`].value) || 1,
+              modPV: Math.floor(Number(f.elements[`pv-${a.id}`].value) || 0),
+              modPM: Math.floor(Number(f.elements[`pm-${a.id}`].value) || 0)
+            }))
+          };
+        }
+      },
+      { action: "cancel", icon: "fa-solid fa-xmark", label: loc("THM.Cancel") }
+    ]
+  });
+  if (!result || result === "cancel" || !result.membros?.length) return;
+
+  /* Aplica e mede a recuperação REAL (diferença antes/depois, já
+   * respeitando o máximo) para o relatório no chat. */
+  const relatorio = [];
+  for (const cfg of result.membros) {
+    const actor = game.actors.get(cfg.id);
+    if (!actor) continue;
+    const antesPV = Number(actor.system.attributes.pv.value) || 0;
+    const antesPM = Number(actor.system.attributes.pm.value) || 0;
+    // Mesma chamada que o RestConfigDialog do sistema usa
+    await actor.descanso(cfg.qualidade, cfg.modPV, cfg.modPM, false, false, false);
+    const pv = actor.system.attributes.pv;
+    const pm = actor.system.attributes.pm;
+    const q = REST_QUALITIES.find((x) => x.value === cfg.qualidade);
+    const extras = [
+      q ? loc(q.key) : cfg.qualidade,
+      cfg.modPV ? `+${cfg.modPV} PV/nível` : null,
+      cfg.modPM ? `+${cfg.modPM} PM/nível` : null
+    ].filter(Boolean).join(", ");
+    relatorio.push({
+      name: actor.name,
+      img: actor.img,
+      pv: (Number(pv.value) || 0) - antesPV,
+      pm: (Number(pm.value) || 0) - antesPM,
+      pvCheio: Number(pv.value) >= Number(pv.max),
+      pmCheio: Number(pm.value) >= Number(pm.max),
+      extras
+    });
+  }
+
+  const linhasHtml = relatorio
+    .map(
+      (r) => `
+      <tr>
+        <td class="thm-rc-who"><img src="${esc(r.img)}" alt="" />
+          <div>${esc(r.name)}<small>${esc(r.extras)}</small></div></td>
+        <td class="thm-rc-pv">+${r.pv} PV${r.pvCheio ? " ✦" : ""}</td>
+        <td class="thm-rc-pm">+${r.pm} PM${r.pmCheio ? " ✦" : ""}</td>
+      </tr>`
+    )
+    .join("");
+  await postGmCard(
+    loc("THM.PartyRestTitle"),
+    "icons/svg/regen.svg",
+    `<table class="thm-rest-chat"><tbody>${linhasHtml}</tbody></table>
+     <p class="thm-rc-note">✦ ${loc("THM.RestFullNote")}</p>`
+  );
+}
+
+/** Modos de rolagem oferecidos ao pedir um teste. */
+const ROLL_MODES = [
+  { value: "publicroll", key: "THM.RollPublic" },
+  { value: "gmroll", key: "THM.RollGm" },
+  { value: "blindroll", key: "THM.RollBlind" },
+  { value: "selfroll", key: "THM.RollSelf" }
+];
+
+/**
+ * (Cliente do jogador) Abre a janela de rolagem da perícia pedida pelo
+ * Mestre. O modo de rolagem escolhido pelo Mestre vira o padrão do
+ * diálogo; a janela de configuração é forçada a abrir independentemente
+ * da preferência local de UsageConfig.
+ */
+async function handleSkillRequest({ actorId, skill, rollMode, requester }) {
+  const actor = game.actors.get(actorId);
+  if (!actor?.isOwner) return;
+  const label = actor.system?.pericias?.[skill]?.label ?? CONFIG.T20?.pericias?.[skill]?.label ?? skill;
+  ui.notifications.info(loc("THM.SkillRequestNotify", { requester, skill: label }));
+
+  // UsageConfig "default": diálogo abre SEM shift; invertido: abre COM shift.
+  const usage = game.settings.get("tormenta20", "UsageConfig");
+  const event = { shiftKey: usage !== "default" };
+
+  const anterior = game.settings.get("core", "rollMode");
+  try {
+    if (rollMode) await game.settings.set("core", "rollMode", rollMode);
+    await actor.rollPericia(skill, { event, message: true });
+  } finally {
+    await game.settings.set("core", "rollMode", anterior);
+  }
+}
+
+/** (GM) Pede um teste de perícia para membros escolhidos da party. */
+async function openSkillRequestDialog(folderId) {
+  if (!game.user.isGM) return;
+  const members = getMembers(folderId).filter((a) => a.system?.pericias);
+  if (!members.length) return ui.notifications.warn(loc("THM.NoMembers"));
+
+  const pericias = Object.entries(CONFIG.T20?.pericias ?? {})
+    .map(([k, v]) => ({ key: k, label: v.label ?? k }))
+    .sort((a, b) => a.label.localeCompare(b.label, "pt-BR"));
+  const perOpts = pericias
+    .map((p) => `<option value="${p.key}">${esc(p.label)}</option>`)
+    .join("");
+  const modeOpts = ROLL_MODES.map(
+    (m) => `<option value="${m.value}">${loc(m.key)}</option>`
+  ).join("");
+
+  const result = await foundry.applications.api.DialogV2.wait({
+    window: { title: loc("THM.SkillRequestTitle"), icon: "fa-solid fa-dice-d20" },
+    position: { width: 420 },
+    content: `<div class="thm-dialog">
+      <div class="form-group">
+        <label>${loc("THM.SkillRequestSkill")}</label>
+        <select name="skill">${perOpts}</select>
+      </div>
+      <div class="form-group">
+        <label>${loc("THM.SkillRequestMode")}</label>
+        <select name="mode">${modeOpts}</select>
+      </div>
+      <fieldset class="thm-fieldset"><legend>${loc("THM.SkillRequestWho")}</legend>
+        <div class="thm-check-list">${memberChecksHtml(members)}</div>
+      </fieldset>
+      <p class="thm-hint">${loc("THM.SkillRequestHint")}</p>
+    </div>`,
+    rejectClose: false,
+    buttons: [
+      {
+        action: "ask",
+        icon: "fa-solid fa-dice-d20",
+        label: loc("THM.SkillRequestAsk"),
+        default: true,
+        callback: (event, button) => ({
+          skill: button.form.elements.skill.value,
+          mode: button.form.elements.mode.value,
+          ids: readCheckedMembers(button.form, members).map((a) => a.id)
+        })
+      },
+      { action: "cancel", icon: "fa-solid fa-xmark", label: loc("THM.Cancel") }
+    ]
+  });
+  if (!result || result === "cancel") return;
+
+  const alvo = members.filter((a) => result.ids.includes(a.id));
+  if (!alvo.length) return ui.notifications.warn(loc("THM.NoneSelected"));
+
+  const label = CONFIG.T20?.pericias?.[result.skill]?.label ?? result.skill;
+  await postGmCard(
+    loc("THM.SkillRequestTitle"),
+    "icons/svg/dice-target.svg",
+    `<p>${loc("THM.SkillRequestChat", {
+      skill: esc(label),
+      names: alvo.map((a) => esc(a.name)).join(", ")
+    })}</p>`
+  );
+
+  for (const actor of alvo) {
+    const payload = {
+      actorId: actor.id,
+      skill: result.skill,
+      rollMode: result.mode,
+      requester: game.user.name
+    };
+    const owner = activeOwnerOf(actor, { excludeUserId: game.user.id });
+    if (owner && socket) {
+      // Dispara no cliente do jogador; erros não travam os demais pedidos
+      socket.executeAsUser("skillRequest", owner.id, payload).catch((err) =>
+        console.warn(`${MODULE_ID} | Falha ao pedir teste para ${actor.name}`, err)
+      );
+    } else {
+      // Sem jogador online: o próprio Mestre rola pelo personagem
+      await handleSkillRequest(payload);
+    }
+  }
+}
+
 class PartySheetApp extends HandlebarsApplicationMixin(ApplicationV2) {
   /** @type {Map<string, PartySheetApp>} */
   static instances = new Map();
@@ -1050,7 +1638,13 @@ class PartySheetApp extends HandlebarsApplicationMixin(ApplicationV2) {
       depositMoney: PartySheetApp.#onDepositMoney,
       withdrawMoney: PartySheetApp.#onWithdrawMoney,
       sendStashItem: PartySheetApp.#onSendStashItem,
-      openConfig: PartySheetApp.#onOpenConfig
+      openConfig: PartySheetApp.#onOpenConfig,
+      editStashMoney: PartySheetApp.#onEditStashMoney,
+      gmDistribute: PartySheetApp.#onGmDistribute,
+      gmRest: PartySheetApp.#onGmRest,
+      gmSkillTest: PartySheetApp.#onGmSkillTest,
+      editStashItem: PartySheetApp.#onEditStashItem,
+      deleteStashItem: PartySheetApp.#onDeleteStashItem
     }
   };
 
@@ -1075,7 +1669,8 @@ class PartySheetApp extends HandlebarsApplicationMixin(ApplicationV2) {
       ? "values"
       : game.settings.get(MODULE_ID, "visibility");
 
-    const members = getMembers(this.folderId).map((a) => {
+    const memberActors = getMembers(this.folderId);
+    const members = memberActors.map((a) => {
       const pv = a.system?.attributes?.pv ?? {};
       const pm = a.system?.attributes?.pm ?? {};
       const bar = (res) => {
@@ -1110,7 +1705,7 @@ class PartySheetApp extends HandlebarsApplicationMixin(ApplicationV2) {
     });
 
     // Estoque oculto da party (flag na pasta — nenhum ator envolvido)
-    const stashData = getStashData(this.folderId);
+    const stashData = getStashDataRaw(this.folderId);
     const items = stashData.items
       .slice()
       .sort(
@@ -1129,15 +1724,21 @@ class PartySheetApp extends HandlebarsApplicationMixin(ApplicationV2) {
     return {
       tab: this.tabGroups.primary,
       hideBars: visibility === "hidden",
+      isGM: game.user.isGM,
       members,
       items,
       money: stashData.money,
-      showTl: partyUsesPlatina(this.folderId)
+      // Mesma lógica de partyUsesPlatina, reusando os dados já obtidos —
+      // a chamada refazia a varredura de atores e o clone do estoque
+      showTl: stashData.money.tl > 0 ||
+        memberActors.some((a) => !!a.getFlag("tormenta20", "sheet.mostrarPlatina"))
     };
   }
 
   _onFirstRender(context, options) {
     super._onFirstRender(context, options);
+    const entryIdOf = (el) =>
+      el.dataset?.itemId ?? el.closest?.("[data-item-id]")?.dataset.itemId;
     new foundry.applications.ux.ContextMenu.implementation(
       this.element,
       ".thm-inv-item",
@@ -1145,10 +1746,30 @@ class PartySheetApp extends HandlebarsApplicationMixin(ApplicationV2) {
         {
           name: loc("THM.SendTo"),
           icon: '<i class="fa-solid fa-paper-plane"></i>',
-          callback: (el) => {
-            const itemId = el.dataset?.itemId ?? el.closest?.("[data-item-id]")?.dataset.itemId;
-            this.#sendStashItem(itemId);
-          }
+          callback: (el) => this.#sendStashItem(entryIdOf(el))
+        },
+        {
+          name: loc("THM.ViewItem"),
+          icon: '<i class="fa-solid fa-eye"></i>',
+          callback: (el) => previewStashItem(this.folderId, entryIdOf(el))
+        },
+        {
+          name: loc("THM.EditItem"),
+          icon: '<i class="fa-solid fa-pen"></i>',
+          condition: () => game.user.isGM,
+          callback: (el) => editStashItem(this.folderId, entryIdOf(el))
+        },
+        {
+          name: loc("THM.ChangeQty"),
+          icon: '<i class="fa-solid fa-hashtag"></i>',
+          condition: () => game.user.isGM,
+          callback: (el) => changeStashItemQty(this.folderId, entryIdOf(el))
+        },
+        {
+          name: loc("THM.DeleteItem"),
+          icon: '<i class="fa-solid fa-trash"></i>',
+          condition: () => game.user.isGM,
+          callback: (el) => deleteStashItem(this.folderId, entryIdOf(el))
         }
       ],
       { jQuery: false }
@@ -1178,9 +1799,25 @@ class PartySheetApp extends HandlebarsApplicationMixin(ApplicationV2) {
       foundry.applications.ux.TextEditor.implementation.getDragEventData(event);
     if (data?.type !== "Item" || data.thmStash || !data.uuid) return;
 
-    const item = fromUuidSync(data.uuid);
-    const actor = item?.parent;
-    if (!(actor instanceof Actor) || !INVENTORY_TYPES.includes(item.type)) return;
+    // fromUuid assíncrono: resolve também itens de compêndio
+    const item = await fromUuid(data.uuid);
+    if (!item || !INVENTORY_TYPES.includes(item.type)) return;
+    const actor = item.parent;
+
+    /* Item de compêndio ou do diretório do mundo (sem ator dono):
+     * apenas o Mestre pode criá-lo direto no inventário da party. */
+    if (!(actor instanceof Actor)) {
+      if (!game.user.isGM) {
+        return ui.notifications.warn(loc("THM.CompendiumDropGmOnly"));
+      }
+      const qty = await promptFreeQty(item.name);
+      if (!qty) return;
+      await stashAddItem(this.folderId, item.toObject(), qty);
+      return ui.notifications.info(
+        loc("THM.CompendiumDropDone", { qty, item: item.name })
+      );
+    }
+
     if (!actor.isOwner) return;
     if (!game.user.isGM && getPartyFolderIdOf(actor) !== this.folderId) {
       return ui.notifications.warn(loc("THM.NoPartyForUser"));
@@ -1200,7 +1837,7 @@ class PartySheetApp extends HandlebarsApplicationMixin(ApplicationV2) {
   }
 
   #sendStashItem(itemId) {
-    const entry = getStashData(this.folderId).items.find((e) => e._id === itemId);
+    const entry = getStashDataRaw(this.folderId).items.find((e) => e._id === itemId);
     if (!entry) return;
     openSendItemDialog({
       stashFolderId: this.folderId,
@@ -1244,7 +1881,7 @@ class PartySheetApp extends HandlebarsApplicationMixin(ApplicationV2) {
       folderId: this.folderId,
       fixedSource: { stashFolderId: this.folderId },
       targetChoices: { members, includeStash: false },
-      maxCoins: getStashData(this.folderId).money
+      maxCoins: getStashDataRaw(this.folderId).money
     });
   }
 
@@ -1255,6 +1892,58 @@ class PartySheetApp extends HandlebarsApplicationMixin(ApplicationV2) {
   static #onOpenConfig() {
     if (game.user.isGM) new PartyManagerApp().render(true);
   }
+
+  static #onEditStashMoney() {
+    openEditStashMoneyDialog(this.folderId);
+  }
+
+  static #onGmDistribute() {
+    openDistributeMoneyDialog(this.folderId);
+  }
+
+  static #onGmRest() {
+    openPartyRestDialog(this.folderId);
+  }
+
+  static #onGmSkillTest() {
+    openSkillRequestDialog(this.folderId);
+  }
+
+  static #onEditStashItem(event, target) {
+    editStashItem(this.folderId, target.dataset.itemId);
+  }
+
+  static #onDeleteStashItem(event, target) {
+    deleteStashItem(this.folderId, target.dataset.itemId);
+  }
+}
+
+/** Quantidade livre (sem máximo) para criar itens de compêndio no estoque. */
+async function promptFreeQty(itemName) {
+  const result = await foundry.applications.api.DialogV2.wait({
+    window: { title: loc("THM.SendToTitle", { item: itemName }), icon: "fa-solid fa-boxes-stacked" },
+    content: `
+      <div class="thm-dialog">
+        <div class="form-group">
+          <label>${loc("THM.Quantity")}</label>
+          <input type="number" name="qty" value="1" min="1" step="1" autofocus />
+        </div>
+      </div>`,
+    rejectClose: false,
+    buttons: [
+      {
+        action: "add",
+        icon: "fa-solid fa-plus",
+        label: loc("THM.Confirm"),
+        default: true,
+        callback: (event, button) =>
+          Math.floor(Number(button.form.elements.qty.value) || 0)
+      },
+      { action: "cancel", icon: "fa-solid fa-xmark", label: loc("THM.Cancel") }
+    ]
+  });
+  if (result === null || result === "cancel") return null;
+  return Number(result) >= 1 ? Number(result) : null;
 }
 
 /** Abre a party sheet adequada ao usuário (com escolha se houver várias). */
@@ -1305,12 +1994,19 @@ async function openPartySheet() {
 
 /** Re-renderiza party sheets abertas quando algo relevante muda. */
 function refreshPartyApps(relatedActor = null) {
+  /* A classificação do ator (pasta de party/estoque) não depende do app:
+   * computa UMA vez, e só quando existe alguma ficha renderizada — este
+   * hook roda a cada updateActor/CRUD de item do mundo inteiro. */
+  let fid, stashFid, classificado = false;
   for (const app of PartySheetApp.instances.values()) {
     if (!app.rendered) continue;
     if (relatedActor) {
-      const fid = getPartyFolderIdOf(relatedActor);
-      const isStashOfApp = stashPartyFolderId(relatedActor) === app.folderId;
-      if (fid !== app.folderId && !isStashOfApp) continue;
+      if (!classificado) {
+        fid = getPartyFolderIdOf(relatedActor);
+        stashFid = stashPartyFolderId(relatedActor);
+        classificado = true;
+      }
+      if (fid !== app.folderId && stashFid !== app.folderId) continue;
     }
     app.queueRender();
   }
@@ -1415,7 +2111,7 @@ class PartyManagerApp extends HandlebarsApplicationMixin(ApplicationV2) {
 
 /** Drop de item do inventário da party sobre uma ficha de ator. */
 async function handleStashDropOnActor(actor, { folderId, entryId }) {
-  const entry = getStashData(folderId).items.find((e) => e._id === entryId);
+  const entry = getStashDataRaw(folderId).items.find((e) => e._id === entryId);
   if (!entry) return;
   const canAct =
     game.user.isGM ||
@@ -1628,6 +2324,7 @@ Hooks.once("socketlib.ready", () => {
   socket.register("gmExecuteTransfer", gmExecuteTransfer);
   socket.register("promptConfirm", promptConfirm);
   socket.register("notify", (message, type) => ui.notifications[type]?.(message));
+  socket.register("skillRequest", handleSkillRequest);
 });
 
 Hooks.once("init", () => {
@@ -1648,6 +2345,8 @@ Hooks.once("ready", () => {
   // Migra estoques criados como ator pela versão anterior (só um GM executa)
   if (game.user.isGM && game.user === game.users.activeGM) {
     gmMigrateLegacyStashes();
+    // Itens temporários de edição do estoque órfãos (recarregou com a ficha aberta)
+    gmCleanupStashEditItems();
   }
 
   // Boas-vindas + abertura do gerenciador quando não há party (só o GM principal)

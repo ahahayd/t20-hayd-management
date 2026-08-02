@@ -6,6 +6,11 @@
   <a data-action="changeTab" data-group="primary" data-tab="inventory" class="{{#if (eq tab "inventory")}}active{{/if}}">
     <i class="fa-solid fa-box-open"></i> {{localize "THM.TabInventory"}}
   </a>
+  {{#if isGM}}
+  <a data-action="changeTab" data-group="primary" data-tab="gm" class="{{#if (eq tab "gm")}}active{{/if}}">
+    <i class="fa-solid fa-crown"></i> {{localize "THM.TabGm"}}
+  </a>
+  {{/if}}
 </nav>
 
 <section class="tab {{#if (eq tab "members")}}active{{/if}}" data-group="primary" data-tab="members">
@@ -59,6 +64,11 @@
       <button type="button" data-action="withdrawMoney" title="{{localize 'THM.WithdrawMoneyTitle'}}">
         <i class="fa-solid fa-arrow-up"></i> {{localize "THM.WithdrawMoney"}}
       </button>
+      {{#if isGM}}
+      <button type="button" class="thm-edit-money" data-action="editStashMoney" title="{{localize 'THM.EditStashMoneyTitle'}}">
+        <i class="fa-solid fa-pen"></i>
+      </button>
+      {{/if}}
     </div>
   </div>
 
@@ -72,10 +82,41 @@
       <button type="button" class="thm-send-money-btn" data-action="sendStashItem" data-item-id="{{this.id}}" title="{{localize 'THM.SendTo'}}">
         <i class="fa-solid fa-paper-plane"></i>
       </button>
+      {{#if ../isGM}}
+      <button type="button" class="thm-send-money-btn" data-action="editStashItem" data-item-id="{{this.id}}" title="{{localize 'THM.EditItem'}}">
+        <i class="fa-solid fa-pen"></i>
+      </button>
+      <button type="button" class="thm-send-money-btn thm-danger" data-action="deleteStashItem" data-item-id="{{this.id}}" title="{{localize 'THM.DeleteItem'}}">
+        <i class="fa-solid fa-trash"></i>
+      </button>
+      {{/if}}
     </div>
     {{else}}
     <p class="thm-empty">{{localize "THM.NoItems"}}</p>
     {{/each}}
   </div>
 </section>
+
+{{#if isGM}}
+<section class="tab {{#if (eq tab "gm")}}active{{/if}}" data-group="primary" data-tab="gm">
+  <div class="thm-gm-tools">
+    <button type="button" data-action="gmDistribute">
+      <i class="fa-solid fa-hand-holding-dollar"></i>
+      <span>{{localize "THM.DistributeMoneyTitle"}}</span>
+      <small>{{localize "THM.DistributeMoneyDesc"}}</small>
+    </button>
+    <button type="button" data-action="gmRest">
+      <i class="fa-solid fa-bed"></i>
+      <span>{{localize "THM.PartyRestTitle"}}</span>
+      <small>{{localize "THM.PartyRestDesc"}}</small>
+    </button>
+    <button type="button" data-action="gmSkillTest">
+      <i class="fa-solid fa-dice-d20"></i>
+      <span>{{localize "THM.SkillRequestTitle"}}</span>
+      <small>{{localize "THM.SkillRequestDesc"}}</small>
+    </button>
+    <p class="thm-hint">{{localize "THM.GmToolsHint"}}</p>
+  </div>
+</section>
+{{/if}}
 </div>

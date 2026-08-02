@@ -381,3 +381,170 @@ ul.currency li.currency-item.thm-send {
   text-align: center;
   color: #782e22;
 }
+
+/* ═══ Ferramentas do Mestre ═════════════════════════════════════════════ */
+
+.thm-gm-tools {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px;
+}
+.thm-gm-tools > button {
+  display: grid;
+  grid-template-columns: 34px 1fr;
+  grid-template-rows: auto auto;
+  align-items: center;
+  text-align: left;
+  gap: 0 8px;
+  padding: 8px 10px;
+  height: auto;
+  line-height: 1.3;
+}
+.thm-gm-tools > button > i {
+  grid-row: 1 / span 2;
+  font-size: 1.4em;
+  justify-self: center;
+}
+.thm-gm-tools > button > span { font-weight: bold; }
+.thm-gm-tools > button > small { opacity: 0.75; }
+.thm-gm-tools .thm-hint { text-align: center; opacity: 0.7; }
+
+/* Botão de editar dinheiro (lápis, só GM) */
+.thm-edit-money {
+  flex: 0 0 auto;
+  width: 28px;
+  padding: 0;
+}
+
+/* Listas de membros com checkbox nos diálogos */
+.thm-check-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 220px;
+  overflow-y: auto;
+}
+.thm-check {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+}
+.thm-check img {
+  width: 22px;
+  height: 22px;
+  object-fit: cover;
+  border-radius: 4px;
+  border: none;
+}
+.thm-fieldset {
+  border: 1px solid var(--color-border-light-2, #999);
+  border-radius: 6px;
+  padding: 6px 8px;
+  margin: 6px 0;
+}
+
+/* Botão de perigo (excluir item do estoque) */
+.thm-send-money-btn.thm-danger:hover { color: #c0392b; }
+
+/* ═══ Descanso da party — cards ═════════════════════════════════════════ */
+
+.thm-rest { display: flex; flex-direction: column; gap: 8px; }
+
+.thm-rest-toolbar {
+  border: 1px dashed var(--color-border-light-2, #999);
+  border-radius: 8px;
+  padding: 6px 10px 8px;
+  opacity: 0.95;
+}
+.thm-rest-toolbar-label {
+  display: block;
+  font-size: 0.78em;
+  font-weight: bold;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  opacity: 0.7;
+  margin-bottom: 4px;
+}
+
+.thm-rest-card {
+  border: 1px solid var(--color-border-light-2, #999);
+  border-radius: 8px;
+  padding: 6px 10px 8px;
+  transition: opacity 150ms ease, border-color 150ms ease;
+}
+/* Card desmarcado: apagado, sem interação nos campos */
+.thm-rest-card:has(.thm-rest-who input:not(:checked)) { opacity: 0.45; }
+.thm-rest-card:has(.thm-rest-who input:not(:checked)) .thm-rest-line {
+  pointer-events: none;
+}
+
+.thm-rest-who {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  margin-bottom: 6px;
+}
+.thm-rest-who input[type="checkbox"] { flex: 0 0 auto; margin: 0; }
+.thm-rest-who img {
+  width: 30px;
+  height: 30px;
+  object-fit: cover;
+  border-radius: 6px;
+  border: none;
+}
+.thm-rest-name { display: flex; flex-direction: column; line-height: 1.2; font-weight: bold; }
+.thm-rest-name small { font-weight: normal; opacity: 0.65; }
+.thm-rest-preview { margin-left: auto; display: flex; gap: 8px; }
+.thm-pv-txt { color: var(--thm-pv-cor, #4caf50); }
+.thm-pm-txt { color: var(--thm-pm-cor, #42a5f5); }
+
+/* Linha de campos: rótulo em cima de cada controle = alinhamento garantido */
+.thm-rest-line {
+  display: grid;
+  grid-template-columns: 1fr 84px 84px;
+  gap: 8px;
+  align-items: end;
+}
+.thm-field { display: flex; flex-direction: column; gap: 2px; }
+.thm-field > span {
+  font-size: 0.7em;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  opacity: 0.65;
+  white-space: nowrap;
+}
+.thm-field input[type="number"] { text-align: center; }
+.thm-field select, .thm-field input { height: 26px; }
+
+/* ═══ Descanso da party — relatório no chat ═════════════════════════════ */
+
+.thm-rest-chat { width: 100%; border-collapse: collapse; margin: 4px 0; }
+.thm-rest-chat td {
+  padding: 4px 6px;
+  border-bottom: 1px solid rgba(120, 120, 120, 0.25);
+  vertical-align: middle;
+}
+.thm-rest-chat tr:last-child td { border-bottom: none; }
+.thm-rc-who { display: flex; align-items: center; gap: 8px; }
+.thm-rc-who img {
+  width: 28px;
+  height: 28px;
+  object-fit: cover;
+  border-radius: 6px;
+  border: none;
+  flex: 0 0 auto;
+}
+.thm-rc-who div { display: flex; flex-direction: column; line-height: 1.25; }
+.thm-rc-who small { opacity: 0.7; }
+.thm-rc-pv, .thm-rc-pm {
+  text-align: right;
+  font-weight: bold;
+  white-space: nowrap;
+  width: 1%;
+}
+.thm-rc-pv { color: var(--thm-pv-cor, #4caf50); }
+.thm-rc-pm { color: var(--thm-pm-cor, #42a5f5); }
+.thm-rc-note { font-size: 0.85em; opacity: 0.7; margin: 2px 0 0; }

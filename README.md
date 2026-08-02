@@ -8,6 +8,11 @@ Ficha de grupo (**Party Sheet**) para o sistema **Tormenta20** no **FoundryVTT v
 - **Inventário compartilhado** da party (um "estoque" comum): arraste itens para dentro/fora dele e entre membros.
 - **Transferência de itens e dinheiro** entre personagens da mesma party.
 - Botão **enviar dinheiro** no cabeçalho da ficha de personagem (ao lado das moedas), para transferir moedas a outro membro ou ao estoque.
+- **Ferramentas do Mestre** (aba exclusiva na Party Sheet — v1.1.0):
+  - **Distribuir dinheiro**: recompensas para os membros marcados, dividindo o total igualmente (a sobra vai ao estoque) ou entregando o valor informado a cada um.
+  - **Descanso da party**: aplica o descanso do sistema a todos de uma vez, com condição (Ruim/Normal/Confortável/Luxuoso) e PV/PM extras por nível configuráveis **por personagem**, prévia ao vivo do quanto cada um vai recuperar e relatório no chat com a recuperação real de cada membro.
+  - **Pedir teste de perícia**: escolha a perícia, o modo de rolagem (pública, privada, às cegas, própria) e quais membros rolam — a janela de rolagem abre na hora no cliente de cada jogador; personagens sem jogador online são rolados pelo Mestre.
+- **Gestão do estoque pelo Mestre** (v1.1.0): edição manual do dinheiro da party, itens de compêndio arrastáveis direto para o inventário compartilhado, e clique direito nos itens do estoque para **ver, editar (ficha completa), alterar quantidade ou excluir**.
 - Integração opcional com o **t20-hayd-loja**.
 
 ## Como usar
@@ -38,7 +43,7 @@ Em *Configurar → Configurações → Gestão de Party*: visibilidade da party 
 Em *Configurar → Módulos Complementares → Instalar Módulo*, cole a URL do manifesto:
 
 ```
-https://raw.githubusercontent.com/ahahayd/t20-hayd-management/main/module.json
+https://github.com/ahahayd/t20-hayd-management/releases/latest/download/module.json
 ```
 
 O módulo **socketlib** é instalado como dependência.

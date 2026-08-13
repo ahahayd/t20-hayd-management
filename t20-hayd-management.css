@@ -548,3 +548,31 @@ ul.currency li.currency-item.thm-send {
 .thm-rc-pv { color: var(--thm-pv-cor, #4caf50); }
 .thm-rc-pm { color: var(--thm-pm-cor, #42a5f5); }
 .thm-rc-note { font-size: 0.85em; opacity: 0.7; margin: 2px 0 0; }
+
+/* ===== Gerenciar Parties — linhas de pasta e toggle de subpasta ========== */
+
+.thm-party-manager .thm-folder-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.thm-party-manager .thm-folder-main {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: 1;
+  min-width: 0;
+  cursor: pointer;
+}
+
+.thm-party-manager .thm-sub-toggle {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: 0 0 auto;
+  font-size: 12px;
+  opacity: 0.85;
+  cursor: pointer;
+  margin-right: 6px;
+}

@@ -124,12 +124,25 @@ function getPartyFolderIds() {
   return Object.keys(getPartiesSetting()).filter((id) => game.folders.get(id));
 }
 
-/** Ids da pasta da party + todas as subpastas. */
+/** Ids da pasta da party + subpastas incluídas.
+ *  Subpastas na lista de exclusão da party (configurável no Gerenciar
+ *  Parties) ficam de fora junto com toda a sua subárvore; subpastas novas
+ *  entram por padrão. */
 function getFolderSubtreeIds(folderId) {
   const folder = game.folders.get(folderId);
   if (!folder) return new Set();
+  // leitura direta (sem deepClone) — chamada em caminhos quentes
+  const cfg = game.settings.get(MODULE_ID, "parties")?.[folderId];
+  const excluidas = new Set(cfg?.subpastasExcluidas ?? []);
   const ids = new Set([folder.id]);
-  for (const sub of folder.getSubfolders(true)) ids.add(sub.id);
+  const descer = (f) => {
+    for (const sub of f.getSubfolders(false)) {
+      if (excluidas.has(sub.id)) continue;
+      ids.add(sub.id);
+      descer(sub);
+    }
+  };
+  descer(folder);
   return ids;
 }
 
@@ -2042,22 +2055,30 @@ class PartyManagerApp extends HandlebarsApplicationMixin(ApplicationV2) {
   async _prepareContext() {
     const parties = getPartiesSetting();
     const folders = [];
-    const walk = (parent, depth) => {
+    // partyAncestor: party registrada mais próxima acima na árvore — suas
+    // subpastas ganham o toggle de inclusão na party
+    const walk = (parent, depth, partyAncestor) => {
       const children = game.folders
         .filter((f) => f.type === "Actor" && (f.folder?.id ?? null) === parent)
         .sort((a, b) => (a.sort ?? 0) - (b.sort ?? 0) || a.name.localeCompare(b.name, "pt-BR"));
       for (const f of children) {
+        const isParty = !!parties[f.id];
+        const subDe = !isParty && partyAncestor ? partyAncestor : null;
         folders.push({
           id: f.id,
           name: f.name,
           indent: 4 + depth * 16,
           color: f.color?.css ?? "#c9a66b",
-          isParty: !!parties[f.id]
+          isParty,
+          subDe,
+          incluida: subDe
+            ? !(parties[subDe].subpastasExcluidas ?? []).includes(f.id)
+            : false
         });
-        walk(f.id, depth + 1);
+        walk(f.id, depth + 1, isParty ? f.id : partyAncestor);
       }
     };
-    walk(null, 0);
+    walk(null, 0, null);
     return { folders };
   }
 
@@ -2069,6 +2090,18 @@ class PartyManagerApp extends HandlebarsApplicationMixin(ApplicationV2) {
       if (!key.startsWith("party.") || !value) continue;
       const folderId = key.slice(6);
       next[folderId] = current[folderId] ?? {};
+    }
+    // Toggles de subpasta: desmarcada → entra na lista de exclusão da party
+    const exclusoes = {};
+    for (const [key, value] of Object.entries(data)) {
+      if (!key.startsWith("sub.")) continue;
+      const [, partyId, subId] = key.split(".");
+      if (!next[partyId] || value) continue;
+      (exclusoes[partyId] ??= []).push(subId);
+    }
+    for (const pid of Object.keys(next)) {
+      if (exclusoes[pid]?.length) next[pid].subpastasExcluidas = exclusoes[pid];
+      else delete next[pid].subpastasExcluidas;
     }
     await game.settings.set(MODULE_ID, "parties", next);
     ui.notifications.info(loc("THM.PartiesSaved"));

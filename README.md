@@ -24,7 +24,7 @@ Crie uma pasta na barra lateral de *Atores* com os personagens do grupo e regist
 
 ### Party Sheet
 
-A aba de **Membros** mostra retrato e PV/PM de cada personagem. Jogadores só veem a party a que pertencem.
+A aba de **Membros** mostra retrato, PV/PM/carga, Defesa e Deslocamento (com todos os tipos de movimento na dica ao passar o mouse) e os testes de Fortitude, Reflexos, Vontade, Percepção e Iniciativa de cada personagem, além dos sentidos especiais que ele possui. Jogadores só veem a party a que pertencem.
 
 ### Inventário e dinheiro compartilhados
 

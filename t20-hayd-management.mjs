@@ -1618,6 +1618,76 @@ async function openSkillRequestDialog(folderId) {
   }
 }
 
+/* ============================================================
+   CARTÃO DE MEMBRO — estatísticas derivadas (Defesa, testes, sentidos)
+============================================================ */
+
+/** Sentidos do sistema (CONFIG.T20.senses): chave → chave de tradução + ícone. */
+const SENSE_META = {
+  escuro: { label: "T20.SenseDarkVision", icon: "fa-moon" },
+  penumbra: { label: "T20.SenseDimVision", icon: "fa-cloud-moon" },
+  cegas: { label: "T20.SenseBlindSight", icon: "fa-eye-slash" },
+  faro: { label: "T20.SenseScent", icon: "fa-wind" }
+};
+
+/** Valor de perícia formatado com sinal (+N / -N), para testes de resistência. */
+function periciaSinal(actor, key) {
+  const v = Math.round(Number(actor.system?.pericias?.[key]?.value)) || 0;
+  return v >= 0 ? `+${v}` : `${v}`;
+}
+
+/** Sentidos do ator (lista de {icon, label}) — combina sentidos padrão e customizados. */
+function sentidosDoMembro(actor) {
+  const sentidos = actor.system?.attributes?.sentidos ?? {};
+  const chaves = Array.isArray(sentidos.value) ? sentidos.value : [];
+  const lista = chaves
+    .filter((k) => SENSE_META[k])
+    .map((k) => ({ icon: SENSE_META[k].icon, label: loc(SENSE_META[k].label) }));
+  if (sentidos.custom) lista.push({ icon: "fa-star", label: sentidos.custom });
+  return lista;
+}
+
+/** Ordem e rótulos dos tipos de deslocamento (mesma ordem da ficha do sistema). */
+const MOVEMENT_ORDER = ["walk", "climb", "burrow", "swim", "fly"];
+const MOVEMENT_LABELS = {
+  climb: "T20.MovementClimb",
+  burrow: "T20.MovementBurrow",
+  swim: "T20.MovementSwim",
+  fly: "T20.MovementFly"
+};
+
+/**
+ * Deslocamentos do ator: `.maxLabel` é o maior valor com a unidade (para o
+ * selo do cartão); `.linhas` lista cada deslocamento com nome, valor e
+ * unidade (para o template montar a dica ao passar o mouse — cada linha é
+ * escapada pelo próprio Handlebars na interpolação, sem HTML pré-montado
+ * aqui). Usa `system.attributes.movement[tipo].value`, já com bônus e
+ * penalidades de armadura, carga e condições aplicados pelo sistema.
+ */
+function movimentosDoMembro(actor) {
+  const movement = actor.system?.attributes?.movement ?? {};
+  const unit = movement.unit || "m";
+  const linhas = [];
+  let max = 0;
+  let maxLabel = `0${unit}`;
+
+  for (const tipo of MOVEMENT_ORDER) {
+    const valor = Number(movement[tipo]?.value) || 0;
+    if (valor <= 0) continue;
+    if (valor > max) {
+      max = valor;
+      maxLabel = `${valor}${unit}`;
+    }
+    const nome = tipo === "walk" ? "" : loc(MOVEMENT_LABELS[tipo]);
+    let linha = `${nome} ${valor}${unit}`.trim();
+    // "(Flutuando)" é texto fixo (não localizado) no próprio sistema Tormenta20
+    if (tipo === "fly" && movement.hover) linha += " (Flutuando)";
+    linhas.push(linha);
+  }
+
+  return { max, maxLabel, linhas };
+}
+
 class PartySheetApp extends HandlebarsApplicationMixin(ApplicationV2) {
   /** @type {Map<string, PartySheetApp>} */
   static instances = new Map();
@@ -1713,7 +1783,15 @@ class PartySheetApp extends HandlebarsApplicationMixin(ApplicationV2) {
         level: a.type === "character" ? (a.system?.attributes?.nivel?.value ?? null) : null,
         pv: bar(pv),
         pm: bar(pm),
-        carga: cargaData
+        carga: cargaData,
+        defesa: Number(a.system?.attributes?.defesa?.value) || 0,
+        fort: periciaSinal(a, "fort"),
+        refl: periciaSinal(a, "refl"),
+        vont: periciaSinal(a, "vont"),
+        percepcao: periciaSinal(a, "perc"),
+        iniciativa: periciaSinal(a, "inic"),
+        sentidos: sentidosDoMembro(a),
+        desloc: movimentosDoMembro(a)
       };
     });
 

@@ -386,31 +386,37 @@
 /* ---------- Botão de enviar dinheiro na ficha ---------- */
 
 /* O <li> injetado não pode esticar (flexrow dá flex:1 aos filhos) nem
-   herdar o visual de "pílula" dos campos de moeda do sistema. */
+   herdar o visual de "pílula" dos campos de moeda do sistema. !important
+   é necessário porque reaproveitamos a classe "currency-item" (para herdar
+   o alinhamento padrão do sistema) e temas de ficha como o t20-hayd-ui
+   estilizam ".currency-item" com !important — sem isso, o botão fica com
+   fundo/borda do tema e some visualmente atrás dos outros itens de moeda. */
 ul.currency li.currency-item.thm-send {
-  flex: 0 0 auto;
-  background: transparent;
-  border: none;
-  padding: 0;
+  flex: 0 0 auto !important;
+  background: transparent !important;
+  border: none !important;
+  padding: 0 !important;
   line-height: normal;
   align-self: center;
 }
 
 /* Quadradinho compacto com o ícone centralizado, como o botão de
-   criar item do inventário do personagem. */
+   criar item do inventário do personagem. Tamanho e fundo em !important
+   pelo mesmo motivo do <li> acima — nunca depender do estilo de moeda de
+   um tema de ficha para continuar visível. */
 .thm-send-money-btn {
-  flex: 0 0 auto;
-  display: inline-flex;
+  flex: 0 0 auto !important;
+  display: inline-flex !important;
   align-items: center;
   justify-content: center;
-  width: 26px;
-  height: 26px;
-  padding: 0;
+  width: 26px !important;
+  height: 26px !important;
+  padding: 0 !important;
   font-size: 12px;
   cursor: pointer;
-  border: 1px solid rgba(128, 128, 128, 0.55);
-  border-radius: 4px;
-  background: rgba(128, 128, 128, 0.15);
+  border: 1px solid rgba(128, 128, 128, 0.55) !important;
+  border-radius: 4px !important;
+  background: rgba(128, 128, 128, 0.15) !important;
 }
 
 .thm-send-money-btn:hover {
